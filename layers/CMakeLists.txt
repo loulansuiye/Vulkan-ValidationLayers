@@ -114,10 +114,7 @@ endif()
 
 # System-specific macros to create a library target.
 if(WIN32)
-    macro(AddVkLayer target)
-        if(TARGET "VkLayer_object_lifetimes")
-            target_compile_definitions(VkLayer_object_lifetimes PUBLIC BUILD_OBJECT_TRACKER)
-        endif()
+    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
         file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_${target}.def DEF_FILE)
         add_custom_target(copy-${target}-def-file ALL
                           COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DEF_FILE} VkLayer_${target}.def
@@ -125,13 +122,15 @@ if(WIN32)
         set_target_properties(copy-${target}-def-file PROPERTIES FOLDER ${LAYERS_HELPER_FOLDER})
 
         add_library(VkLayer_${target} SHARED ${ARGN} VkLayer_${target}.def)
+        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
         target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
         add_dependencies(VkLayer_${target} generate_helper_files VkLayer_utils)
         install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endmacro()
 elseif(APPLE)
-    macro(AddVkLayer target)
+    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
         add_library(VkLayer_${target} SHARED ${ARGN})
+        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
         target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
         add_dependencies(VkLayer_${target} generate_helper_files VkLayer_utils)
         set_target_properties(VkLayer_${target}
@@ -142,8 +141,9 @@ elseif(APPLE)
         install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
     endmacro()
 else(UNIX AND NOT APPLE) # i.e.: Linux
-    macro(AddVkLayer target)
+    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
         add_library(VkLayer_${target} SHARED ${ARGN})
+        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
         target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
         add_dependencies(VkLayer_${target} generate_helper_files VkLayer_utils)
         set_target_properties(VkLayer_${target} PROPERTIES LINK_FLAGS "-Wl,-Bsymbolic,--exclude-libs,ALL")
@@ -190,16 +190,12 @@ GenerateFromVkXml(uber_layer_dispatch_generator.py uber_layer_dispatch.h)
 GenerateFromVkXml(uber_layer_dispatch_generator.py uber_layer_dispatch.cpp)
 
 if(BUILD_LAYERS)
-    AddVkLayer(core_validation core_validation.cpp convert_to_renderpass2.cpp descriptor_sets.cpp buffer_validation.cpp shader_validation.cpp xxhash.c)
-
-    AddVkLayer(object_lifetimes object_tracker.cpp object_tracker.h object_tracker_utils.cpp uber_layer.cpp uber_layer.h uber_layer_dispatch.cpp uber_layer_dispatch.h)
-    AddVkLayer(threading threading.cpp thread_check.h)
-    AddVkLayer(unique_objects unique_objects.cpp unique_objects_wrappers.h)
-    AddVkLayer(parameter_validation
-               parameter_validation.cpp
-               parameter_validation_utils.cpp
-               parameter_validation.h
-               vk_validation_error_messages.h)
+    AddVkLayer(core_validation "" core_validation.cpp convert_to_renderpass2.cpp descriptor_sets.cpp buffer_validation.cpp shader_validation.cpp xxhash.c)
+    AddVkLayer(object_lifetimes "BUILD_OBJECT_TRACKER" object_tracker.cpp object_tracker.h object_tracker_utils.cpp uber_layer.cpp uber_layer.h uber_layer_dispatch.cpp uber_layer_dispatch.h)
+    AddVkLayer(threading "" threading.cpp thread_check.h)
+    #AddVkLayer(unique_objects unique_objects.cpp unique_objects_wrappers.h)
+    AddVkLayer(unique_objects "UBER_LAYER_CAN_WRAP_OBJECTS" uber_layer.cpp uber_layer_dispatch.cpp uber_layer.h uber_layer_dispatch.h)
+    AddVkLayer(parameter_validation "" parameter_validation.cpp parameter_validation_utils.cpp parameter_validation.h vk_validation_error_messages.h)
 
     # Core validation has additional dependencies
     target_include_directories(VkLayer_core_validation PRIVATE ${GLSLANG_SPIRV_INCLUDE_DIR})
